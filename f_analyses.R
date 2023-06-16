@@ -7,6 +7,8 @@ library(patchwork)
 library(corrplot)
 library(gtsummary)
 library(gt)
+library(rstanarm)
+library(broom.mixed)
 
 # Set CI to 0.90
 emm_options(summary = list(level = 0.90))
