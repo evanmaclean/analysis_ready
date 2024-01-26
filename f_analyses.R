@@ -86,6 +86,27 @@ orders <- select(orders, id, visit_1)
 h_saliva <- left_join(h_saliva, orders)
 h_saliva_wide <- left_join(h_saliva_wide, orders)
 
+## Table with means by timepoint x condition per reviewer request
+
+hmeans <- h_saliva |> group_by(matrix, condition, timepoint) |> summarise(mean = mean(corr_conc, na.rm = T), se = plotrix::std.error(corr_conc, na.rm = T)) 
+
+htable_data <- select(h_saliva, id, condition, corr_conc, timepoint) |> pivot_wider(names_from = condition, values_from = corr_conc) 
+
+tmp <- tbl_summary(select(htable_data, CT, PD, UD, timepoint), by = timepoint, missing = 'no') |> modify_header(all_stat_cols() ~ "**{level}**") 
+
+dtable_data <- select(d_saliva, id, condition, corr_conc, timepoint) |> pivot_wider(names_from = condition, values_from = corr_conc)
+
+tmp2 <- tbl_summary(select(dtable_data, PD, UD, timepoint), by = timepoint, missing = 'no') |> modify_header(all_stat_cols() ~ "**{level}**") 
+tmp3 <- tbl_stack(list(tmp, tmp2), group_header = c("children","dogs"))
+
+tmp3 <- tmp3 |> modify_header(label = "") |> 
+  modify_table_body(~.x |>mutate(label = case_when(
+    label == 'CT' ~ "nonsocial control",
+    label == 'PD' ~ "pet dog",
+    label == 'UD' ~ "unfamiliar dog",
+  ))) |> modify_column_alignment(align = "right", columns = "label") |> modify_header(stat_1 = "pre", stat_2 = "post") 
+
+
 # Dog saliva ----
 ## comparison of UD and PD cort levels ----
 
@@ -137,6 +158,15 @@ pd_dog_sal_betas <- gather_draws(pd_d_sal_mod, b_timepointT3) %>% ungroup() %>% 
 
 pp_check(pd_d_sal_mod, ndraws = 50)
 summary(pd_d_sal_mod, prob = 0.90)
+
+# reviewer request - sex interaction
+pd_sex_time_interaction <- brm(f_norm~timepoint * sex + age + weight + (1|id), data = filter(d_saliva, condition == 'PD'), prior = b_prior, sample_prior = TRUE, refresh = 0, seed = my_seed, control = list(adapt_delta = 0.99))
+
+conditional_effects(pd_sex_time_interaction, effects = 'timepoint:sex')
+
+pd_sex_time_emmeans <- emmeans(pd_sex_time_interaction, pairwise ~ timepoint | sex)
+summary(pd_sex_time_emmeans)
+contrast(pd_sex_time_emmeans, interaction = "pairwise", by = NULL) # is time effect different for males and females?
 
 dog_changes <- bind_cols(pd_dog_sal_betas, ud_dog_sal_betas)
 theme_set(theme_classic())
@@ -221,9 +251,38 @@ summary(means_frame, point.est = "mean")
 
 plot(means_frame)
 
+# reviewer request - sex moderation 
+
+# UD condition
+child_ud_sex_x_time <- brm(log_f_z~timepoint*sex + age + session_num + (1|id), data = filter(h_saliva, condition == 'UD'), prior = b_prior, sample_prior = TRUE, seed = my_seed, refresh = 0)
+pp_check(child_ud_sex_x_time)
+conditional_effects(child_ud_sex_x_time, effects = "timepoint:sex")
+child_ud_sex_x_time_emmeans <- emmeans(child_ud_sex_x_time, pairwise ~ timepoint | sex)
+contrast(child_ud_sex_x_time_emmeans, interaction = "pairwise", by = NULL)
+
+# PD condition
+child_pd_sex_x_time <- brm(log_f_z~timepoint*sex + age + session_num + (1|id), data = filter(h_saliva, condition == 'PD'), prior = b_prior, sample_prior = TRUE, seed = my_seed, refresh = 0)
+pp_check(child_pd_sex_x_time)
+conditional_effects(child_pd_sex_x_time, effects = "timepoint:sex")
+child_pd_sex_x_time_emmeans <- emmeans(child_pd_sex_x_time, pairwise ~ timepoint | sex)
+contrast(child_pd_sex_x_time_emmeans, interaction = "pairwise", by = NULL)
+
+# CT condition
+child_ct_sex_x_time <- brm(log_f_z~timepoint*sex + age + session_num + (1|id), data = filter(h_saliva, condition == 'CT'), prior = b_prior, sample_prior = TRUE, seed = my_seed, refresh = 0)
+pp_check(child_ct_sex_x_time)
+conditional_effects(child_ct_sex_x_time, effects = "timepoint:sex")
+child_ct_sex_x_time_emmeans <- emmeans(child_ct_sex_x_time, pairwise ~ timepoint | sex)
+contrast(child_ct_sex_x_time_emmeans, interaction = "pairwise", by = NULL)
+
 # look at differences between conditions at each timepoint
 cond_compare_by_time <- emmeans(child_sal_f_mod, pairwise ~ condition | timepoint)
 summary(cond_compare_by_time, point.est = "mean")
+
+# reviewer request comparison of T1 concentrations between session 1 and 2
+sess_dat <- filter(h_saliva, session_num < 3, timepoint == 'T1')
+sess_mod <- brm(log_f_z~factor(session_num) + sex + age, data = sess_dat, seed = my_seed, refresh = 0)
+pp_check(sess_mod)
+summary(sess_mod, prob = 0.9)
 
 ## child AUC by condition models ----
 
@@ -268,6 +327,11 @@ summary(my_means, point.est = "mean")
 
 my_means <- emmeans(child_sal_AUCi_mod, specs = trt.vs.ctrl ~ condition, ref = 2:3)
 summary(my_means, point.est = "mean")
+
+# reviewer request - control for locomotion in above model
+loc_child_sal_AUCi_mod <- brm(AUCi_norm ~ condition + session_num + sex + age + child_locomoting + (1|id), data = h_saliva_wide, prior = b_prior, sample_prior = TRUE, refresh = 0, seed = my_seed)
+loc_means <- emmeans(loc_child_sal_AUCi_mod, specs = pairwise ~ condition)
+summary(loc_means, point.est = "mean")
 
 # Assemble three plots - I am intentionally making the two individual betas their own panels. 
 theme_set(theme_classic(14))
