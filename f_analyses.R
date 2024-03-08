@@ -106,6 +106,8 @@ tmp3 <- tmp3 |> modify_header(label = "") |>
     label == 'UD' ~ "unfamiliar dog",
   ))) |> modify_column_alignment(align = "right", columns = "label") |> modify_header(stat_1 = "pre", stat_2 = "post") 
 
+tmp3 |> as_gt() |> gtsave('tables/f_means.html')
+
 
 # Dog saliva ----
 ## comparison of UD and PD cort levels ----
